@@ -1,78 +1,103 @@
-import mongoose from "mongoose";
-import User from "../models/User.js";
-import bcrypt from "bcryptjs";
-import {createError} from "../error.js";
-import jwt from "jsonwebtoken";
-export const signup = async(req,res,next)=>{
+import { createError } from "../error.js";
+ import User from "../models/User.js";
+ import Video from "../models/Video.js";
+
+export const update= async (req,res,next)=>{
+ if(req.params.id===req.user.id)
+ {
+   try{
+   const updatedUser=await User.findByIdAndUpdate(
+    req.params.id,
+    {
+     $set:req.body,
+   },
+   {new:true}
+   );
+   res.status(200).json(updatedUser);
+  }catch(err){
+    next(err);
+  }
+ }else{
+   return next(createError(403,"You can update only your account!"));
+ }
+};
+export const deleteUser = async (req,res,next)=>{
+    if(req.params.id===req.user.id)
+    {
+      try{
+      await User.findByIdAndDelete(
+       req.params.id,
+       
+      );
+      res.status(200).json("User has been deleted.");
+     }catch(err){
+       next(err);
+     }
+    }else{
+      return next(createError(403,"You can delete only your account!"));
+    }
+};
+export const getUser=async(req,res,next)=>{
+ try{
+    const user = await User.findById(req.params.id);
+    res.status(200).json(user);
+ }catch(err){
+    next(err);
+ }
+};
+export const subscribe=async(req,res,next)=>{
     try{
-      console.log(req.body);
-         const user= await User.findOne({email:req.body.email});
-        if(!user){
-       const salt = bcrypt.genSaltSync(10);
-       const hash = bcrypt.hashSync(req.body.password, salt);
-       const newUser= new User({...req.body, password:hash});
-   
-         await newUser.save();
-         const savedUser= await User.findOne({name:req.user.name});   
-          const {password,...others}=savedUser._doc;  
-            const token=jwt.sign({id:savedUser._id},process.env.JWT);
-            res.cookie("access_token",token,{
-                httpOnly:true,
-            })
-            .status(200)
-            .json({...others});}
-        
+        await User.findByIdAndUpdate(req.user.id, {
+            $push: { subscribedUsers: req.params.id },
+          });
+        await User.findByIdAndUpdate(req.params.id, {
+            $inc: { subscribers: 1 },
+          });
+          res.status(200).json("Subscription successfull.")
     }catch(err){
        next(err);
     }
-   };
-
-export const signin=async(req,res,next)=>{
-
+};
+export const unsubscribe=async(req,res,next)=>{
     try{
-        const user=await User. findOne({name:req.body.name});
-        if(!user) return next(createError(404,"user not found"));
-        const isCorrect=await bcrypt.compare(req.body.password,user.password);
-        if(!isCorrect) return next(createError(400,"Wrong credentials"));
-        const token=jwt.sign({id:user._id},process.env.JWT);
-       
-        const {password,...others}=user._doc;
-         console.log(res.cookie);
-        console.log(token);
-        res.cookie("access_token",token,{
-            httpOnly:true
-        }).status(200).json({...others});
+        try{
+            await User.findByIdAndUpdate(req.user.id, {
+                $pull: { subscribedUsers: req.params.id },
+              });
+            await User.findByIdAndUpdate(req.params.id, {
+                $inc: { subscribers: -1 },
+              });
+              res.status(200).json("Unsubscription successfull.")
+        }catch(err){
+           next(err);
+        }
     }catch(err){
-    next(err);
+       next(err);
     }
-    };
-
-   export const googleAuth = async (req, res, next) => {
+};
+export const like=async(req,res,next)=>{
+  const id = req.user.id;
+  const videoId = req.params.videoId; 
+    try{
+      await Video.findByIdAndUpdate(videoId,{
+        $addToSet:{likes:id},
+        $pull:{dislikes:id}
+      })
+      res.status(200).json("The video has been liked.")
+    }catch(err){
+       next(err);
+    }
+};
+export const dislike=async(req,res,next)=>{
+  const id = req.user.id;
+  const videoId = req.params.videoId;
   try {
-    const user = await User.findOne({ email: req.body.email });
-    if (user) {
-      const token = jwt.sign({ id: user._id }, process.env.JWT);
-      res
-        .cookie("access_token", token, {
-          httpOnly: true,
-        })
-        .status(200)
-        .json(user._doc);
-    } else {
-      const newUser = new User({
-        ...req.body,
-        fromGoogle: true,
-      });
-      const savedUser = await newUser.save();
-      const token = jwt.sign({ id: savedUser._id }, process.env.JWT);
-      res
-        .cookie("access_token", token, {
-          httpOnly: true,
-        })
-        .status(200)
-        .json(savedUser._doc);
+    await Video.findByIdAndUpdate(videoId,{
+      $addToSet:{dislikes:id},
+      $pull:{likes:id}
+    })
+    res.status(200).json("The video has been disliked.")
+} catch (err) {
+  next(err);
     }
-  } catch (err) {
-    next(err);
-  }
 };
